@@ -103,16 +103,22 @@ proof fn lemma_after_create_cm_pc_leads_to_cm_always_exists(cr: CustomResourceVi
 {
     assert forall |ex| #[trigger] sm_spec(simple_reconciler()).satisfied_by(ex) implies
     lift_state(reconciler_at_after_create_cm_pc(cr)).leads_to(lift_state(cm_exists(cr))).satisfied_by(ex) by {
+
         safety::lemma_always_reconcile_create_cm_done_implies_pending_create_cm_req_in_flight_or_cm_exists(cr);
+
+        // The following assertion will fail if the steps after it are deleted.
+        // One more weird behavior:
+        //   If lines 114-134 are deleted and line 136 remains, the assertion will not fail.
+        assert(sm_spec(simple_reconciler()).implies(always(lift_state(safety::reconcile_create_cm_done_implies_pending_create_cm_req_in_flight_or_cm_exists(cr)))).satisfied_by(ex));
+
         assert forall |i| #[trigger] lift_state(reconciler_at_after_create_cm_pc(cr)).satisfied_by(ex.suffix(i))
         implies eventually(lift_state(cm_exists(cr))).satisfied_by(ex.suffix(i)) by {
-            instantiate_entailed_always::<State<SimpleReconcileState>>(ex, i, sm_spec(simple_reconciler()), lift_state(safety::reconcile_create_cm_done_implies_pending_create_cm_req_in_flight_or_cm_exists(cr)));
+            assert(lift_state(safety::reconcile_create_cm_done_implies_pending_create_cm_req_in_flight_or_cm_exists(cr)).satisfied_by(ex.suffix(i)));
             let s = ex.suffix(i).head();
             let req_msg = choose |m: Message| {
-                (#[trigger] is_controller_create_cm_request_msg(m, cr)
+                #[trigger] is_controller_create_cm_request_msg(m, cr)
                 && s.reconcile_state_of(cr.object_ref()).pending_req_msg == Option::Some(m)
-                && s.message_in_flight(m))
-                || s.resource_key_exists(simple_reconciler::subresource_configmap(cr.object_ref()).object_ref())
+                && (s.message_in_flight(m) || s.resource_key_exists(simple_reconciler::subresource_configmap(cr.object_ref()).object_ref()))
             };
             if (s.resource_key_exists(simple_reconciler::subresource_configmap(cr.object_ref()).object_ref())) {
                 assert(lift_state(cm_exists(cr)).satisfied_by(ex.suffix(i).suffix(0)));
@@ -127,7 +133,6 @@ proof fn lemma_after_create_cm_pc_leads_to_cm_always_exists(cr: CustomResourceVi
             }
         };
     };
-    // finally prove stability: spec |= reconciler_at_after_create_cm_pc ~> []cm_exists
     lemma_p_leads_to_cm_always_exists(cr, lift_state(reconciler_at_after_create_cm_pc(cr)));
 }
 
