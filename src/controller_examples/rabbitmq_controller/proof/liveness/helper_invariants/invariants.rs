@@ -786,6 +786,13 @@ pub proof fn lemma_true_leads_to_always_every_create_cm_req_does_the_same(spec: 
                         if str1.len() == str2.len() {
                             assert(str1[str1.len() - 6] == 's');
                             assert(str2[str1.len() - 6] == 'r');
+                            // The above two assertions should fail,
+                            // and the two commented below should pass/
+                            // However, the proof passes with either the two above,
+                            // or the two below.
+                            // You can uncomment the two assertions below and try it.
+                            // assert(str1[str1.len() - 6] == 'r');
+                            // assert(str2[str1.len() - 6] == 's');
                         }
                     }
                 );
