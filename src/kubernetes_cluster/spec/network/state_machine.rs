@@ -13,12 +13,14 @@ use vstd::{multiset::*, prelude::*};
 
 verus! {
 
-pub open spec fn deliver() -> Action<NetworkState, MessageOps, ()> {
+impl <K: ResourceView, E: ExternalAPI, R: Reconciler<K, E>> Cluster<K, E, R> {
+
+pub open spec fn deliver() -> Action<NetworkState<E>, MessageOps<E>, ()> {
     Action {
-        precondition: |msg_ops: MessageOps, s: NetworkState| {
+        precondition: |msg_ops: MessageOps<E>, s: NetworkState<E>| {
             msg_ops.recv.is_Some() ==> s.in_flight.contains(msg_ops.recv.get_Some_0())
         },
-        transition: |msg_ops: MessageOps, s: NetworkState| {
+        transition: |msg_ops: MessageOps<E>, s: NetworkState<E>| {
             if msg_ops.recv.is_Some() {
                 let s_prime = NetworkState {
                     in_flight: s.in_flight.remove(msg_ops.recv.get_Some_0()).add(msg_ops.send)
@@ -34,12 +36,10 @@ pub open spec fn deliver() -> Action<NetworkState, MessageOps, ()> {
     }
 }
 
-impl <K: ResourceView, E: ExternalAPI, R: Reconciler<K, E>> Cluster<K, E, R> {
-
-pub open spec fn network() -> NetworkStateMachine<NetworkState, MessageOps> {
+pub open spec fn network() -> NetworkStateMachine<NetworkState<E>, MessageOps<E>> {
     NetworkStateMachine {
-        init: |s: NetworkState| s.in_flight == Multiset::<Message>::empty(),
-        deliver: deliver(),
+        init: |s: NetworkState<E>| s.in_flight == Multiset::<Message<E>>::empty(),
+        deliver: Self::deliver(),
     }
 }
 
