@@ -9,10 +9,18 @@ verus! {
 pub enum FluentBitReconcileStep {
     Init,
     AfterGetSecret,
+    AfterGetRole,
     AfterCreateRole,
+    AfterUpdateRole,
+    AfterGetServiceAccount,
     AfterCreateServiceAccount,
+    AfterUpdateServiceAccount,
+    AfterGetRoleBinding,
     AfterCreateRoleBinding,
+    AfterUpdateRoleBinding,
+    AfterGetDaemonSet,
     AfterCreateDaemonSet,
+    AfterUpdateDaemonSet,
     Done,
     Error,
 }

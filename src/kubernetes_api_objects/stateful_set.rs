@@ -1,15 +1,9 @@
 // Copyright 2022 VMware, Inc.
 // SPDX-License-Identifier: MIT
-use crate::kubernetes_api_objects::api_resource::*;
-use crate::kubernetes_api_objects::common::*;
-use crate::kubernetes_api_objects::dynamic::*;
-use crate::kubernetes_api_objects::error::ParseDynamicObjectError;
-use crate::kubernetes_api_objects::label_selector::*;
-use crate::kubernetes_api_objects::marshal::*;
-use crate::kubernetes_api_objects::object_meta::*;
-use crate::kubernetes_api_objects::persistent_volume_claim::*;
-use crate::kubernetes_api_objects::pod_template_spec::*;
-use crate::kubernetes_api_objects::resource::*;
+use crate::kubernetes_api_objects::{
+    api_resource::*, common::*, dynamic::*, error::ParseDynamicObjectError, label_selector::*,
+    marshal::*, object_meta::*, persistent_volume_claim::*, pod_template_spec::*, resource::*,
+};
 use crate::pervasive_ext::string_map::*;
 use crate::pervasive_ext::string_view::*;
 use vstd::prelude::*;
@@ -53,9 +47,7 @@ impl StatefulSet {
         ensures
             s@ == self@,
     {
-        StatefulSet {
-            inner: self.inner.clone(),
-        }
+        StatefulSet { inner: self.inner.clone() }
     }
 
     #[verifier(external_body)]
@@ -105,9 +97,9 @@ impl StatefulSet {
 
     // NOTE: This function assumes serde_json::to_string won't fail!
     #[verifier(external_body)]
-    pub fn to_dynamic_object(self) -> (obj: DynamicObject)
+    pub fn marshal(self) -> (obj: DynamicObject)
         ensures
-            obj@ == self@.to_dynamic_object(),
+            obj@ == self@.marshal(),
     {
         DynamicObject::from_kube(
             deps_hack::k8s_openapi::serde_json::from_str(&deps_hack::k8s_openapi::serde_json::to_string(&self.inner).unwrap()).unwrap()
@@ -116,10 +108,10 @@ impl StatefulSet {
 
     /// Convert a DynamicObject to a StatefulSet
     #[verifier(external_body)]
-    pub fn from_dynamic_object(obj: DynamicObject) -> (res: Result<StatefulSet, ParseDynamicObjectError>)
+    pub fn unmarshal(obj: DynamicObject) -> (res: Result<StatefulSet, ParseDynamicObjectError>)
         ensures
-            res.is_Ok() == StatefulSetView::from_dynamic_object(obj@).is_Ok(),
-            res.is_Ok() ==> res.get_Ok_0()@ == StatefulSetView::from_dynamic_object(obj@).get_Ok_0(),
+            res.is_Ok() == StatefulSetView::unmarshal(obj@).is_Ok(),
+            res.is_Ok() ==> res.get_Ok_0()@ == StatefulSetView::unmarshal(obj@).get_Ok_0(),
     {
         let parse_result = obj.into_kube().try_parse::<deps_hack::k8s_openapi::api::apps::v1::StatefulSet>();
         if parse_result.is_ok() {
@@ -220,18 +212,49 @@ impl StatefulSetSpec {
     }
 
     #[verifier(external_body)]
+    pub fn overwrite_pvc_retention_policy(&mut self, pvc_retention_policy: Option<StatefulSetPersistentVolumeClaimRetentionPolicy>)
+        ensures
+            pvc_retention_policy.is_None() ==> self@ == old(self)@.unset_pvc_retention_policy(),
+            pvc_retention_policy.is_Some() ==> self@ == old(self)@.set_pvc_retention_policy(pvc_retention_policy.get_Some_0()@),
+    {
+        match pvc_retention_policy {
+            Some(pvc) => {
+                self.inner.persistent_volume_claim_retention_policy = Some(pvc.into_kube());
+            },
+            None => {
+                self.inner.persistent_volume_claim_retention_policy = None;
+            },
+        }
+    }
+
+    #[verifier(external_body)]
     pub fn replicas(&self) -> (replicas: Option<i32>)
         ensures
             self@.replicas.is_Some() == replicas.is_Some(),
             replicas.is_Some() ==> replicas.get_Some_0() == self@.replicas.get_Some_0(),
     {
-        if self.inner.replicas.is_none() {
-            None
-        } else {
-            Some(self.inner.replicas.clone().unwrap())
-        }
+        self.inner.replicas.clone()
     }
 
+    #[verifier(external_body)]
+    pub fn template(&self) -> (template: PodTemplateSpec)
+        ensures
+            template@ == self@.template,
+    {
+        PodTemplateSpec::from_kube(self.inner.template.clone())
+    }
+
+    #[verifier(external_body)]
+    pub fn persistent_volume_claim_retention_policy(&self) -> (persistent_volume_claim_retention_policy: Option<StatefulSetPersistentVolumeClaimRetentionPolicy>)
+        ensures
+            self@.persistent_volume_claim_retention_policy.is_Some() == persistent_volume_claim_retention_policy.is_Some(),
+            persistent_volume_claim_retention_policy.is_Some() ==> persistent_volume_claim_retention_policy.get_Some_0()@ == self@.persistent_volume_claim_retention_policy.get_Some_0(),
+    {
+        match &self.inner.persistent_volume_claim_retention_policy {
+            Some(p) => Some(StatefulSetPersistentVolumeClaimRetentionPolicy::from_kube(p.clone())),
+            None => None,
+        }
+    }
 }
 
 impl ResourceWrapper<deps_hack::k8s_openapi::api::apps::v1::StatefulSetSpec> for StatefulSetSpec {
@@ -302,7 +325,7 @@ impl ResourceView for StatefulSetView {
         self.spec
     }
 
-    open spec fn to_dynamic_object(self) -> DynamicObjectView {
+    open spec fn marshal(self) -> DynamicObjectView {
         DynamicObjectView {
             kind: Self::kind(),
             metadata: self.metadata,
@@ -310,7 +333,7 @@ impl ResourceView for StatefulSetView {
         }
     }
 
-    open spec fn from_dynamic_object(obj: DynamicObjectView) -> Result<StatefulSetView, ParseDynamicObjectError> {
+    open spec fn unmarshal(obj: DynamicObjectView) -> Result<StatefulSetView, ParseDynamicObjectError> {
         if obj.kind != Self::kind() {
             Err(ParseDynamicObjectError::UnmarshalError)
         } else if !StatefulSetView::unmarshal_spec(obj.spec).is_Ok() {
@@ -323,29 +346,45 @@ impl ResourceView for StatefulSetView {
         }
     }
 
-    proof fn to_dynamic_preserves_integrity() {
-        StatefulSetView::spec_integrity_is_preserved_by_marshal();
+    proof fn marshal_preserves_integrity() {
+        StatefulSetView::marshal_spec_preserves_integrity();
     }
 
-    proof fn from_dynamic_preserves_metadata() {}
+    proof fn marshal_preserves_metadata() {}
 
-    proof fn from_dynamic_preserves_kind() {}
+    proof fn marshal_preserves_kind() {}
 
     closed spec fn marshal_spec(s: Option<StatefulSetSpecView>) -> Value;
 
     closed spec fn unmarshal_spec(v: Value) -> Result<Option<StatefulSetSpecView>, ParseDynamicObjectError>;
 
     #[verifier(external_body)]
-    proof fn spec_integrity_is_preserved_by_marshal() {}
+    proof fn marshal_spec_preserves_integrity() {}
 
-    proof fn from_dynamic_object_result_determined_by_unmarshal() {}
+    proof fn unmarshal_result_determined_by_unmarshal_spec() {}
 
-    open spec fn rule(obj: StatefulSetView) -> bool {
-        true
+    open spec fn state_validation(self) -> bool {
+        let new_spec = self.spec.get_Some_0();
+        &&& self.spec.is_Some()
+        &&& new_spec.replicas.is_Some() ==> new_spec.replicas.get_Some_0() > 0
+        &&& new_spec.pod_management_policy.is_Some()
+            ==> (new_spec.pod_management_policy.get_Some_0() == new_strlit("OrderedReady")@
+                || new_spec.pod_management_policy.get_Some_0() == new_strlit("Parallel")@)
+        &&& new_spec.persistent_volume_claim_retention_policy.is_Some()
+            ==> new_spec.persistent_volume_claim_retention_policy.get_Some_0().state_validation()
     }
 
-    open spec fn transition_rule(new_obj: StatefulSetView, old_obj: StatefulSetView) -> bool {
-        true
+    open spec fn transition_validation(self, old_obj: StatefulSetView) -> bool {
+        let old_spec = old_obj.spec.get_Some_0();
+        let new_spec = self.spec.get_Some_0();
+        // Fields other than replicas, template, persistent_volume_claim_retention_policy
+        // (and some other unspecified fields) are immutable.
+        &&& old_spec == StatefulSetSpecView {
+            replicas: old_spec.replicas,
+            template: old_spec.template,
+            persistent_volume_claim_retention_policy: old_spec.persistent_volume_claim_retention_policy,
+            ..new_spec
+        }
     }
 }
 
@@ -417,6 +456,13 @@ impl StatefulSetSpecView {
     pub open spec fn set_pvc_retention_policy(self, pvc_retention_policy: StatefulSetPersistentVolumeClaimRetentionPolicyView) -> StatefulSetSpecView {
         StatefulSetSpecView {
             persistent_volume_claim_retention_policy: Some(pvc_retention_policy),
+            ..self
+        }
+    }
+
+    pub open spec fn unset_pvc_retention_policy(self) -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            persistent_volume_claim_retention_policy: None,
             ..self
         }
     }
@@ -499,6 +545,11 @@ impl StatefulSetPersistentVolumeClaimRetentionPolicyView {
             when_deleted: None,
             when_scaled: None,
         }
+    }
+
+    pub open spec fn state_validation(self) -> bool {
+        &&& self.when_deleted.is_Some() ==> (self.when_deleted.get_Some_0() == new_strlit("Retain")@ || self.when_deleted.get_Some_0() == new_strlit("Delete")@)
+        &&& self.when_scaled.is_Some() ==> (self.when_scaled.get_Some_0() == new_strlit("Retain")@ || self.when_scaled.get_Some_0() == new_strlit("Delete")@)
     }
 
     pub open spec fn set_when_deleted(self, when_deleted: StringView) -> StatefulSetPersistentVolumeClaimRetentionPolicyView {

@@ -18,10 +18,10 @@ pub use zookeeper;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("MissingObjectKey: {0}")]
-    MissingObjectKey(&'static str),
-    #[error("APIError")]
-    APIError,
+    #[error("ShimLayerError: {0}")]
+    ShimLayerError(String),
+    #[error("ReconcileCoreError")]
+    ReconcileCoreError,
 }
 
 #[derive(
@@ -47,6 +47,8 @@ pub struct ZookeeperClusterSpec {
     pub resources: Option<k8s_openapi::api::core::v1::ResourceRequirements>,
     pub affinity: Option<k8s_openapi::api::core::v1::Affinity>,
     pub tolerations: Option<Vec<k8s_openapi::api::core::v1::Toleration>>,
+    #[serde(default)]
+    pub node_selector: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub labels: std::collections::BTreeMap<String, String>,
     #[serde(default)]
@@ -125,6 +127,10 @@ pub struct RabbitmqClusterSpec {
     pub rabbitmq_config: Option<RabbitmqConfig>,
     pub affinity: Option<k8s_openapi::api::core::v1::Affinity>,
     pub tolerations: Option<Vec<k8s_openapi::api::core::v1::Toleration>>,
+    #[serde(default)]
+    pub labels: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub annotations: std::collections::BTreeMap<String, String>,
     pub resources: Option<k8s_openapi::api::core::v1::ResourceRequirements>,
     /// podManagementPolicy controls how pods are created during initial scale up,
     /// when replacing pods on nodes, or when scaling down. The default policy is
@@ -181,6 +187,10 @@ pub struct FluentBitSpec {
     #[serde(default)]
     pub resources: Option<k8s_openapi::api::core::v1::ResourceRequirements>,
     pub tolerations: Option<Vec<k8s_openapi::api::core::v1::Toleration>>,
+    #[serde(default)]
+    pub labels: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub annotations: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(

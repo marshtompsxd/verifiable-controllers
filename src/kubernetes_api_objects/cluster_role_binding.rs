@@ -1,13 +1,9 @@
 // Copyright 2022 VMware, Inc.
 // SPDX-License-Identifier: MIT
-use crate::kubernetes_api_objects::api_resource::*;
-use crate::kubernetes_api_objects::common::*;
-use crate::kubernetes_api_objects::dynamic::*;
-use crate::kubernetes_api_objects::error::ParseDynamicObjectError;
-use crate::kubernetes_api_objects::marshal::*;
-use crate::kubernetes_api_objects::object_meta::*;
-use crate::kubernetes_api_objects::resource::*;
-use crate::kubernetes_api_objects::role_binding::*;
+use crate::kubernetes_api_objects::{
+    api_resource::*, common::*, dynamic::*, error::ParseDynamicObjectError, marshal::*,
+    object_meta::*, resource::*, role_binding::*,
+};
 use crate::pervasive_ext::string_map::StringMap;
 use crate::pervasive_ext::string_view::StringView;
 use vstd::prelude::*;
@@ -45,7 +41,7 @@ impl ClusterRoleBinding {
         ensures
             metadata@ == self@.metadata,
     {
-        todo!()
+        ObjectMeta::from_kube(self.inner.metadata.clone())
     }
 
     #[verifier(external_body)]
@@ -88,9 +84,9 @@ impl ClusterRoleBinding {
     }
 
     #[verifier(external_body)]
-    pub fn to_dynamic_object(self) -> (obj: DynamicObject)
+    pub fn marshal(self) -> (obj: DynamicObject)
         ensures
-            obj@ == self@.to_dynamic_object(),
+            obj@ == self@.marshal(),
     {
         DynamicObject::from_kube(
             deps_hack::k8s_openapi::serde_json::from_str(&deps_hack::k8s_openapi::serde_json::to_string(&self.inner).unwrap()).unwrap()
@@ -98,10 +94,10 @@ impl ClusterRoleBinding {
     }
 
     #[verifier(external_body)]
-    pub fn from_dynamic_object(obj: DynamicObject) -> (res: Result<ClusterRoleBinding, ParseDynamicObjectError>)
+    pub fn unmarshal(obj: DynamicObject) -> (res: Result<ClusterRoleBinding, ParseDynamicObjectError>)
         ensures
-            res.is_Ok() == ClusterRoleBindingView::from_dynamic_object(obj@).is_Ok(),
-            res.is_Ok() ==> res.get_Ok_0()@ == ClusterRoleBindingView::from_dynamic_object(obj@).get_Ok_0(),
+            res.is_Ok() == ClusterRoleBindingView::unmarshal(obj@).is_Ok(),
+            res.is_Ok() ==> res.get_Ok_0()@ == ClusterRoleBindingView::unmarshal(obj@).get_Ok_0(),
     {
         let parse_result = obj.into_kube().try_parse::<deps_hack::k8s_openapi::api::rbac::v1::ClusterRoleBinding>();
         if parse_result.is_ok() {
@@ -181,7 +177,7 @@ impl ResourceView for ClusterRoleBindingView {
         (self.role_ref, self.subjects)
     }
 
-    open spec fn to_dynamic_object(self) -> DynamicObjectView {
+    open spec fn marshal(self) -> DynamicObjectView {
         DynamicObjectView {
             kind: Self::kind(),
             metadata: self.metadata,
@@ -189,7 +185,7 @@ impl ResourceView for ClusterRoleBindingView {
         }
     }
 
-    open spec fn from_dynamic_object(obj: DynamicObjectView) -> Result<ClusterRoleBindingView, ParseDynamicObjectError> {
+    open spec fn unmarshal(obj: DynamicObjectView) -> Result<ClusterRoleBindingView, ParseDynamicObjectError> {
         if obj.kind != Self::kind() {
             Err(ParseDynamicObjectError::UnmarshalError)
         } else if !ClusterRoleBindingView::unmarshal_spec(obj.spec).is_Ok() {
@@ -203,28 +199,28 @@ impl ResourceView for ClusterRoleBindingView {
         }
     }
 
-    proof fn to_dynamic_preserves_integrity() {
-        ClusterRoleBindingView::spec_integrity_is_preserved_by_marshal();
+    proof fn marshal_preserves_integrity() {
+        ClusterRoleBindingView::marshal_spec_preserves_integrity();
     }
 
-    proof fn from_dynamic_preserves_metadata() {}
+    proof fn marshal_preserves_metadata() {}
 
-    proof fn from_dynamic_preserves_kind() {}
+    proof fn marshal_preserves_kind() {}
 
     closed spec fn marshal_spec(s: ClusterRoleBindingSpecView) -> Value;
 
     closed spec fn unmarshal_spec(v: Value) -> Result<ClusterRoleBindingSpecView, ParseDynamicObjectError>;
 
     #[verifier(external_body)]
-    proof fn spec_integrity_is_preserved_by_marshal() {}
+    proof fn marshal_spec_preserves_integrity() {}
 
-    proof fn from_dynamic_object_result_determined_by_unmarshal() {}
+    proof fn unmarshal_result_determined_by_unmarshal_spec() {}
 
-    open spec fn rule(obj: ClusterRoleBindingView) -> bool {
+    open spec fn state_validation(self) -> bool {
         true
     }
 
-    open spec fn transition_rule(new_obj: ClusterRoleBindingView, old_obj: ClusterRoleBindingView) -> bool {
+    open spec fn transition_validation(self, old_obj: ClusterRoleBindingView) -> bool {
         true
     }
 }

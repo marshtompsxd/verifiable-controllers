@@ -1,10 +1,8 @@
 // Copyright 2022 VMware, Inc.
 // SPDX-License-Identifier: MIT
-use crate::kubernetes_api_objects::common::*;
-use crate::kubernetes_api_objects::error::ParseDynamicObjectError;
-use crate::kubernetes_api_objects::marshal::*;
-use crate::kubernetes_api_objects::owner_reference::*;
-use crate::kubernetes_api_objects::resource::*;
+use crate::kubernetes_api_objects::{
+    common::*, error::ParseDynamicObjectError, marshal::*, owner_reference::*, resource::*,
+};
 use crate::pervasive_ext::string_map::*;
 use crate::pervasive_ext::string_view::*;
 use vstd::prelude::*;
@@ -37,6 +35,14 @@ impl ObjectMeta {
         ObjectMeta {
             inner: deps_hack::k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta::default(),
         }
+    }
+
+    #[verifier(external_body)]
+    pub fn clone(&self) -> (s: Self)
+        ensures
+            s@ == self@,
+    {
+        ObjectMeta { inner: self.inner.clone() }
     }
 
     #[verifier(external_body)]

@@ -2,10 +2,7 @@
 // SPDX-License-Identifier: MIT
 #![allow(unused_imports)]
 use crate::external_api::spec::*;
-use crate::kubernetes_api_objects::{
-    api_method::*, common::*, config_map::*, dynamic::*, owner_reference::*, resource::*,
-    stateful_set::*,
-};
+use crate::kubernetes_api_objects::prelude::*;
 use crate::kubernetes_cluster::spec::{
     builtin_controllers::types::BuiltinControllerChoice,
     cluster::*,
@@ -34,7 +31,7 @@ pub open spec fn every_update_msg_sets_owner_references_as(
             #[trigger] s.in_flight().contains(msg)
             && msg.dst.is_KubernetesAPI()
             && msg.content.is_update_request()
-            && msg.content.get_update_request().key == key
+            && msg.content.get_update_request().key() == key
             && msg.content.get_update_request().obj.kind == key.kind
             ==> requirements(msg.content.get_update_request().obj.metadata.owner_references)
     }

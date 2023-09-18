@@ -1,10 +1,9 @@
 // Copyright 2022 VMware, Inc.
 // SPDX-License-Identifier: MIT
-use crate::kubernetes_api_objects::api_resource::*;
-use crate::kubernetes_api_objects::common::*;
-use crate::kubernetes_api_objects::dynamic::*;
-use crate::kubernetes_api_objects::marshal::*;
-use crate::kubernetes_api_objects::resource::*;
+use crate::kubernetes_api_objects::{
+    api_resource::*, common::*, dynamic::*, error::ParseDynamicObjectError, marshal::*,
+    object_meta::*, resource::*,
+};
 use crate::pervasive_ext::string_view::*;
 use vstd::prelude::*;
 use vstd::seq_lib::*;
@@ -86,13 +85,35 @@ impl Volume {
     /// Methods for the fields that Anvil currently does not reason about
 
     #[verifier(external_body)]
-    pub fn set_empty_dir(&mut self)
+    pub fn set_empty_dir(&mut self, empty_dir: EmptyDirVolumeSource)
         ensures
-            self@ == old(self)@,
+            self@ == old(self)@.set_empty_dir(empty_dir@),
     {
-        self.inner.empty_dir = Some(deps_hack::k8s_openapi::api::core::v1::EmptyDirVolumeSource{
-            ..deps_hack::k8s_openapi::api::core::v1::EmptyDirVolumeSource::default()
-        });
+        self.inner.empty_dir = Some(empty_dir.into_kube());
+    }
+}
+
+#[verifier(external_body)]
+pub struct EmptyDirVolumeSource {
+    inner: deps_hack::k8s_openapi::api::core::v1::EmptyDirVolumeSource,
+}
+
+impl EmptyDirVolumeSource {
+    pub spec fn view(&self) -> EmptyDirVolumeSourceView;
+
+    #[verifier(external_body)]
+    pub fn default() -> (empty_dir_volum_source: EmptyDirVolumeSource)
+        ensures
+            empty_dir_volum_source@ == EmptyDirVolumeSourceView::default(),
+    {
+        EmptyDirVolumeSource {
+            inner: deps_hack::k8s_openapi::api::core::v1::EmptyDirVolumeSource::default(),
+        }
+    }
+
+    #[verifier(external)]
+    pub fn into_kube(self) -> deps_hack::k8s_openapi::api::core::v1::EmptyDirVolumeSource {
+        self.inner
     }
 }
 
@@ -482,12 +503,30 @@ impl ObjectFieldSelector {
         }
     }
 
+    pub fn new_with(api_version: String, field_path: String) -> (object_field_selector: ObjectFieldSelector)
+        ensures
+            object_field_selector@ == ObjectFieldSelectorView::default().set_api_version(api_version@).set_field_path(field_path@),
+    {
+        let mut selector = ObjectFieldSelector::default();
+        selector.set_api_version(api_version);
+        selector.set_field_path(field_path);
+        selector
+    }
+
     #[verifier(external_body)]
     pub fn set_field_path(&mut self, field_path: String)
         ensures
             self@ == old(self)@.set_field_path(field_path@),
     {
         self.inner.field_path = field_path.into_rust_string();
+    }
+
+    #[verifier(external_body)]
+    pub fn set_api_version(&mut self, api_version: String)
+        ensures
+            self@ == old(self)@.set_api_version(api_version@),
+    {
+        self.inner.api_version = Some(api_version.into_rust_string());
     }
 
     #[verifier(external)]
@@ -503,6 +542,7 @@ pub struct VolumeView {
     pub projected: Option<ProjectedVolumeSourceView>,
     pub secret: Option<SecretVolumeSourceView>,
     pub downward_api: Option<DownwardAPIVolumeSourceView>,
+    pub empty_dir: Option<EmptyDirVolumeSourceView>,
 }
 
 impl VolumeView {
@@ -514,6 +554,7 @@ impl VolumeView {
             projected: None,
             secret: None,
             downward_api: None,
+            empty_dir: None,
         }
     }
 
@@ -552,10 +593,31 @@ impl VolumeView {
         }
     }
 
+    pub open spec fn set_empty_dir(self, empty_dir: EmptyDirVolumeSourceView) -> VolumeView {
+        VolumeView {
+            empty_dir: Some(empty_dir),
+            ..self
+        }
+    }
+
     pub open spec fn set_downward_api(self, downward_api: DownwardAPIVolumeSourceView) -> VolumeView {
         VolumeView {
             downward_api: Some(downward_api),
             ..self
+        }
+    }
+}
+
+pub struct EmptyDirVolumeSourceView {
+    pub medium: Option<String>,
+    pub size_limit: Option<StringView>,
+}
+
+impl EmptyDirVolumeSourceView {
+    pub open spec fn default() -> EmptyDirVolumeSourceView {
+        EmptyDirVolumeSourceView {
+            medium: None,
+            size_limit: None,
         }
     }
 }
@@ -797,18 +859,27 @@ impl DownwardAPIVolumeFileView {
 
 pub struct ObjectFieldSelectorView {
     pub field_path: StringView,
+    pub api_version: Option<StringView>,
 }
 
 impl ObjectFieldSelectorView {
     pub open spec fn default() -> ObjectFieldSelectorView {
         ObjectFieldSelectorView {
             field_path: new_strlit("")@,
+            api_version: None,
         }
     }
 
     pub open spec fn set_field_path(self, field_path: StringView) -> ObjectFieldSelectorView {
         ObjectFieldSelectorView {
-            field_path,
+            field_path: field_path,
+            ..self
+        }
+    }
+
+    pub open spec fn set_api_version(self, api_version: StringView) -> ObjectFieldSelectorView {
+        ObjectFieldSelectorView {
+            api_version: Some(api_version),
             ..self
         }
     }

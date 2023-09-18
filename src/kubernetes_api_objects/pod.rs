@@ -1,18 +1,11 @@
 // Copyright 2022 VMware, Inc.
 // SPDX-License-Identifier: MIT
-use crate::kubernetes_api_objects::affinity::*;
-use crate::kubernetes_api_objects::api_resource::*;
-use crate::kubernetes_api_objects::common::*;
-use crate::kubernetes_api_objects::container::*;
-use crate::kubernetes_api_objects::dynamic::*;
-use crate::kubernetes_api_objects::error::ParseDynamicObjectError;
-use crate::kubernetes_api_objects::marshal::*;
-use crate::kubernetes_api_objects::object_meta::*;
-use crate::kubernetes_api_objects::resource::*;
-use crate::kubernetes_api_objects::resource_requirements::*;
-use crate::kubernetes_api_objects::toleration::*;
-use crate::kubernetes_api_objects::volume::*;
-use crate::pervasive_ext::string_view::*;
+use crate::kubernetes_api_objects::{
+    affinity::*, api_resource::*, common::*, container::*, dynamic::*,
+    error::ParseDynamicObjectError, marshal::*, object_meta::*, resource::*,
+    resource_requirements::*, toleration::*, volume::*,
+};
+use crate::pervasive_ext::{string_map::*, string_view::*};
 use vstd::prelude::*;
 use vstd::seq_lib::*;
 use vstd::string::*;
@@ -63,7 +56,10 @@ impl Pod {
             self@.spec.is_Some() == spec.is_Some(),
             spec.is_Some() ==> spec.get_Some_0()@ == self@.spec.get_Some_0(),
     {
-        todo!()
+        match &self.inner.spec {
+            Some(s) => Some(PodSpec::from_kube(s.clone())),
+            None => None,
+        }
     }
 
     #[verifier(external_body)]
@@ -97,9 +93,9 @@ impl Pod {
 
     // NOTE: This function assumes serde_json::to_string won't fail!
     #[verifier(external_body)]
-    pub fn to_dynamic_object(self) -> (obj: DynamicObject)
+    pub fn marshal(self) -> (obj: DynamicObject)
         ensures
-            obj@ == self@.to_dynamic_object(),
+            obj@ == self@.marshal(),
     {
         DynamicObject::from_kube(
             deps_hack::k8s_openapi::serde_json::from_str(&deps_hack::k8s_openapi::serde_json::to_string(&self.inner).unwrap()).unwrap()
@@ -108,10 +104,10 @@ impl Pod {
 
     /// Convert a DynamicObject to a Pod
     #[verifier(external_body)]
-    pub fn from_dynamic_object(obj: DynamicObject) -> (res: Result<Pod, ParseDynamicObjectError>)
+    pub fn unmarshal(obj: DynamicObject) -> (res: Result<Pod, ParseDynamicObjectError>)
         ensures
-            res.is_Ok() == PodView::from_dynamic_object(obj@).is_Ok(),
-            res.is_Ok() ==> res.get_Ok_0()@ == PodView::from_dynamic_object(obj@).get_Ok_0(),
+            res.is_Ok() == PodView::unmarshal(obj@).is_Ok(),
+            res.is_Ok() ==> res.get_Ok_0()@ == PodView::unmarshal(obj@).get_Ok_0(),
     {
         let parse_result = obj.into_kube().try_parse::<deps_hack::k8s_openapi::api::core::v1::Pod>();
         if parse_result.is_ok() {
@@ -221,6 +217,19 @@ impl PodSpec {
         }
     }
 
+    #[verifier(external_body)]
+    pub fn set_node_selector(&mut self, node_selector: StringMap)
+        ensures
+            self@ == old(self)@.set_node_selector(node_selector@),
+    {
+        self.inner.node_selector = Some(node_selector.into_rust_map())
+    }
+
+    #[verifier(external)]
+    pub fn from_kube(inner: deps_hack::k8s_openapi::api::core::v1::PodSpec) -> PodSpec {
+        PodSpec { inner: inner }
+    }
+
     #[verifier(external)]
     pub fn into_kube(self) -> deps_hack::k8s_openapi::api::core::v1::PodSpec {
         self.inner
@@ -283,7 +292,7 @@ impl ResourceView for PodView {
         self.spec
     }
 
-    open spec fn to_dynamic_object(self) -> DynamicObjectView {
+    open spec fn marshal(self) -> DynamicObjectView {
         DynamicObjectView {
             kind: Self::kind(),
             metadata: self.metadata,
@@ -291,7 +300,7 @@ impl ResourceView for PodView {
         }
     }
 
-    open spec fn from_dynamic_object(obj: DynamicObjectView) -> Result<PodView, ParseDynamicObjectError> {
+    open spec fn unmarshal(obj: DynamicObjectView) -> Result<PodView, ParseDynamicObjectError> {
         if obj.kind != Self::kind() {
             Err(ParseDynamicObjectError::UnmarshalError)
         } else if !PodView::unmarshal_spec(obj.spec).is_Ok() {
@@ -304,28 +313,28 @@ impl ResourceView for PodView {
         }
     }
 
-    proof fn to_dynamic_preserves_integrity() {
-        PodView::spec_integrity_is_preserved_by_marshal();
+    proof fn marshal_preserves_integrity() {
+        PodView::marshal_spec_preserves_integrity();
     }
 
-    proof fn from_dynamic_preserves_metadata() {}
+    proof fn marshal_preserves_metadata() {}
 
-    proof fn from_dynamic_preserves_kind() {}
+    proof fn marshal_preserves_kind() {}
 
     closed spec fn marshal_spec(s: Option<PodSpecView>) -> Value;
 
     closed spec fn unmarshal_spec(v: Value) -> Result<Option<PodSpecView>, ParseDynamicObjectError>;
 
     #[verifier(external_body)]
-    proof fn spec_integrity_is_preserved_by_marshal(){}
+    proof fn marshal_spec_preserves_integrity(){}
 
-    proof fn from_dynamic_object_result_determined_by_unmarshal() {}
+    proof fn unmarshal_result_determined_by_unmarshal_spec() {}
 
-    open spec fn rule(obj: PodView) -> bool {
-        true
+    open spec fn state_validation(self) -> bool {
+        &&& self.spec.is_Some()
     }
 
-    open spec fn transition_rule(new_obj: PodView, old_obj: PodView) -> bool {
+    open spec fn transition_validation(self, old_obj: PodView) -> bool {
         true
     }
 }
@@ -337,6 +346,7 @@ pub struct PodSpecView {
     pub init_containers: Option<Seq<ContainerView>>,
     pub service_account_name: Option<StringView>,
     pub tolerations: Option<Seq<TolerationView>>,
+    pub node_selector: Option<Map<StringView, StringView>>,
 }
 
 impl PodSpecView {
@@ -348,6 +358,7 @@ impl PodSpecView {
             init_containers: None,
             service_account_name: None,
             tolerations: None,
+            node_selector: None,
         }
     }
 
@@ -403,6 +414,13 @@ impl PodSpecView {
     pub open spec fn unset_tolerations(self) -> PodSpecView {
         PodSpecView {
             tolerations: None,
+            ..self
+        }
+    }
+
+    pub open spec fn set_node_selector(self, node_selector: Map<StringView, StringView>) -> PodSpecView {
+        PodSpecView {
+            node_selector: Some(node_selector),
             ..self
         }
     }

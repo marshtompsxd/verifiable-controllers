@@ -45,7 +45,7 @@ pub proof fn lemma_always_scheduled_cr_has_lower_uid_than_uid_counter(spec: Temp
     assert forall |s, s_prime| invariant(s) && #[trigger] stronger_next(s, s_prime) implies invariant(s_prime) by {
         // if s_prime.controller_state.scheduled_reconciles.contains_key(key) {
             assert(s.kubernetes_api_state.uid_counter <= s_prime.kubernetes_api_state.uid_counter);
-            K::from_dynamic_preserves_metadata();
+            K::marshal_preserves_metadata();
         // }
     }
     init_invariant(spec, Self::init(), stronger_next, invariant);
@@ -362,7 +362,7 @@ pub proof fn lemma_always_pending_req_in_flight_or_resp_in_flight_at_reconcile_s
                 }
                 Step::KubernetesBusy(input) => {
                     if input == Some(s.ongoing_reconciles()[key].pending_req_msg.get_Some_0()) {
-                        let resp_msg = Message::form_matched_resp_msg(s.ongoing_reconciles()[key].pending_req_msg.get_Some_0(), Err(APIError::ServerTimeout));
+                        let resp_msg = Message::form_matched_err_resp_msg(s.ongoing_reconciles()[key].pending_req_msg.get_Some_0(), APIError::ServerTimeout);
                         assert(s_prime.in_flight().contains(resp_msg));
                     } else {
                         if !s.in_flight().contains(s.ongoing_reconciles()[key].pending_req_msg.get_Some_0()) {

@@ -6,7 +6,7 @@ use crate::kubernetes_api_objects::{
     api_resource::*, common::*, dynamic::*, marshal::*, object_meta::*, owner_reference::*,
     resource::*, resource_requirements::*, toleration::*,
 };
-use crate::pervasive_ext::string_view::*;
+use crate::pervasive_ext::{string_map::*, string_view::*};
 use deps_hack::kube::Resource;
 use vstd::prelude::*;
 
@@ -62,9 +62,9 @@ impl FluentBit {
 
     // NOTE: This function assumes serde_json::to_string won't fail!
     #[verifier(external_body)]
-    pub fn to_dynamic_object(self) -> (obj: DynamicObject)
+    pub fn marshal(self) -> (obj: DynamicObject)
         ensures
-            obj@ == self@.to_dynamic_object(),
+            obj@ == self@.marshal(),
     {
         // TODO: this might be unnecessarily slow
         DynamicObject::from_kube(
@@ -73,10 +73,10 @@ impl FluentBit {
     }
 
     #[verifier(external_body)]
-    pub fn from_dynamic_object(obj: DynamicObject) -> (res: Result<FluentBit, ParseDynamicObjectError>)
+    pub fn unmarshal(obj: DynamicObject) -> (res: Result<FluentBit, ParseDynamicObjectError>)
         ensures
-            res.is_Ok() == FluentBitView::from_dynamic_object(obj@).is_Ok(),
-            res.is_Ok() ==> res.get_Ok_0()@ == FluentBitView::from_dynamic_object(obj@).get_Ok_0(),
+            res.is_Ok() == FluentBitView::unmarshal(obj@).is_Ok(),
+            res.is_Ok() ==> res.get_Ok_0()@ == FluentBitView::unmarshal(obj@).get_Ok_0(),
     {
         let parse_result = obj.into_kube().try_parse::<deps_hack::FluentBit>();
         if parse_result.is_ok() {
@@ -140,6 +140,22 @@ impl FluentBitSpec {
             Some(tols) => Some(tols.clone().into_iter().map(|t: deps_hack::k8s_openapi::api::core::v1::Toleration| Toleration::from_kube(t)).collect()),
             None => None,
         }
+    }
+
+    #[verifier(external_body)]
+    pub fn labels(&self) -> (labels: StringMap)
+        ensures
+            labels@ == self@.labels,
+    {
+        StringMap::from_rust_map(self.inner.labels.clone())
+    }
+
+    #[verifier(external_body)]
+    pub fn annotations(&self) -> (annotations: StringMap)
+        ensures
+            annotations@ == self@.annotations,
+    {
+        StringMap::from_rust_map(self.inner.annotations.clone())
     }
 }
 

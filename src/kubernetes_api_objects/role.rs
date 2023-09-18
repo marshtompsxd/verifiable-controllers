@@ -1,12 +1,9 @@
 // Copyright 2022 VMware, Inc.
 // SPDX-License-Identifier: MIT
-use crate::kubernetes_api_objects::api_resource::*;
-use crate::kubernetes_api_objects::common::*;
-use crate::kubernetes_api_objects::dynamic::*;
-use crate::kubernetes_api_objects::error::ParseDynamicObjectError;
-use crate::kubernetes_api_objects::marshal::*;
-use crate::kubernetes_api_objects::object_meta::*;
-use crate::kubernetes_api_objects::resource::*;
+use crate::kubernetes_api_objects::{
+    api_resource::*, common::*, dynamic::*, error::ParseDynamicObjectError, marshal::*,
+    object_meta::*, resource::*,
+};
 use crate::pervasive_ext::string_map::StringMap;
 use crate::pervasive_ext::string_view::StringView;
 use vstd::prelude::*;
@@ -43,7 +40,7 @@ impl Role {
         ensures
             metadata@ == self@.metadata,
     {
-        todo!()
+        ObjectMeta::from_kube(self.inner.metadata.clone())
     }
 
 
@@ -65,6 +62,14 @@ impl Role {
         )
     }
 
+    #[verifier(external_body)]
+    pub fn clone(&self) -> (c: Self)
+        ensures
+            c@ == self@,
+    {
+        Role { inner: self.inner.clone() }
+    }
+
     #[verifier(external)]
     pub fn into_kube(self) -> deps_hack::k8s_openapi::api::rbac::v1::Role {
         self.inner
@@ -79,9 +84,9 @@ impl Role {
     }
 
     #[verifier(external_body)]
-    pub fn to_dynamic_object(self) -> (obj: DynamicObject)
+    pub fn marshal(self) -> (obj: DynamicObject)
         ensures
-            obj@ == self@.to_dynamic_object(),
+            obj@ == self@.marshal(),
     {
         DynamicObject::from_kube(
             deps_hack::k8s_openapi::serde_json::from_str(&deps_hack::k8s_openapi::serde_json::to_string(&self.inner).unwrap()).unwrap()
@@ -89,10 +94,10 @@ impl Role {
     }
 
     #[verifier(external_body)]
-    pub fn from_dynamic_object(obj: DynamicObject) -> (res: Result<Role, ParseDynamicObjectError>)
+    pub fn unmarshal(obj: DynamicObject) -> (res: Result<Role, ParseDynamicObjectError>)
         ensures
-            res.is_Ok() == RoleView::from_dynamic_object(obj@).is_Ok(),
-            res.is_Ok() ==> res.get_Ok_0()@ == RoleView::from_dynamic_object(obj@).get_Ok_0(),
+            res.is_Ok() == RoleView::unmarshal(obj@).is_Ok(),
+            res.is_Ok() ==> res.get_Ok_0()@ == RoleView::unmarshal(obj@).get_Ok_0(),
     {
         let parse_result = obj.into_kube().try_parse::<deps_hack::k8s_openapi::api::rbac::v1::Role>();
         if parse_result.is_ok() {
@@ -216,7 +221,7 @@ impl ResourceView for RoleView {
         (self.policy_rules, ())
     }
 
-    open spec fn to_dynamic_object(self) -> DynamicObjectView {
+    open spec fn marshal(self) -> DynamicObjectView {
         DynamicObjectView {
             kind: Self::kind(),
             metadata: self.metadata,
@@ -224,7 +229,7 @@ impl ResourceView for RoleView {
         }
     }
 
-    open spec fn from_dynamic_object(obj: DynamicObjectView) -> Result<RoleView, ParseDynamicObjectError> {
+    open spec fn unmarshal(obj: DynamicObjectView) -> Result<RoleView, ParseDynamicObjectError> {
         if obj.kind != Self::kind() {
             Err(ParseDynamicObjectError::UnmarshalError)
         } else if !RoleView::unmarshal_spec(obj.spec).is_Ok() {
@@ -237,28 +242,29 @@ impl ResourceView for RoleView {
         }
     }
 
-    proof fn to_dynamic_preserves_integrity() {
-        RoleView::spec_integrity_is_preserved_by_marshal();
+    proof fn marshal_preserves_integrity() {
+        RoleView::marshal_spec_preserves_integrity();
     }
 
-    proof fn from_dynamic_preserves_metadata() {}
+    proof fn marshal_preserves_metadata() {}
 
-    proof fn from_dynamic_preserves_kind() {}
+    proof fn marshal_preserves_kind() {}
 
     closed spec fn marshal_spec(s: RoleSpecView) -> Value;
 
     closed spec fn unmarshal_spec(v: Value) -> Result<RoleSpecView, ParseDynamicObjectError>;
 
     #[verifier(external_body)]
-    proof fn spec_integrity_is_preserved_by_marshal() {}
+    proof fn marshal_spec_preserves_integrity() {}
 
-    proof fn from_dynamic_object_result_determined_by_unmarshal() {}
+    proof fn unmarshal_result_determined_by_unmarshal_spec() {}
 
-    open spec fn rule(obj: RoleView) -> bool {
-        true
+    open spec fn state_validation(self) -> bool {
+        &&& self.policy_rules.is_Some()
+            ==> forall |i| 0 <= i < self.policy_rules.get_Some_0().len() ==> #[trigger] self.policy_rules.get_Some_0()[i].state_validation()
     }
 
-    open spec fn transition_rule(new_obj: RoleView, old_obj: RoleView) -> bool {
+    open spec fn transition_validation(self, old_obj: RoleView) -> bool {
         true
     }
 }
@@ -276,6 +282,14 @@ impl PolicyRuleView {
             resources: None,
             verbs: Seq::empty(),
         }
+    }
+
+    pub open spec fn state_validation(self) -> bool {
+        &&& self.api_groups.is_Some()
+        &&& self.api_groups.get_Some_0().len() > 0
+        &&& self.resources.is_Some()
+        &&& self.resources.get_Some_0().len() > 0
+        &&& self.verbs.len() > 0
     }
 
     pub open spec fn set_api_groups(self, api_groups: Seq<StringView>) -> PolicyRuleView {
@@ -298,7 +312,6 @@ impl PolicyRuleView {
             ..self
         }
     }
-
 }
 
 impl Marshalable for PolicyRuleView {

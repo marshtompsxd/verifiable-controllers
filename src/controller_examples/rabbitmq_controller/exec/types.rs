@@ -5,7 +5,7 @@ use crate::kubernetes_api_objects::{
     affinity::*, api_resource::*, common::*, dynamic::*, marshal::*, object_meta::*,
     owner_reference::*, resource::*, resource_requirements::*, stateful_set::*, toleration::*,
 };
-use crate::pervasive_ext::string_view::*;
+use crate::pervasive_ext::{string_map::*, string_view::*};
 use crate::rabbitmq_controller::spec::types::*;
 use deps_hack::kube::Resource;
 use vstd::prelude::*;
@@ -78,9 +78,9 @@ impl RabbitmqCluster {
 
     // NOTE: This function assumes serde_json::to_string won't fail!
     #[verifier(external_body)]
-    pub fn to_dynamic_object(self) -> (obj: DynamicObject)
+    pub fn marshal(self) -> (obj: DynamicObject)
         ensures
-            obj@ == self@.to_dynamic_object(),
+            obj@ == self@.marshal(),
     {
         // TODO: this might be unnecessarily slow
         DynamicObject::from_kube(
@@ -89,10 +89,10 @@ impl RabbitmqCluster {
     }
 
     #[verifier(external_body)]
-    pub fn from_dynamic_object(obj: DynamicObject) -> (res: Result<RabbitmqCluster, ParseDynamicObjectError>)
+    pub fn unmarshal(obj: DynamicObject) -> (res: Result<RabbitmqCluster, ParseDynamicObjectError>)
         ensures
-            res.is_Ok() == RabbitmqClusterView::from_dynamic_object(obj@).is_Ok(),
-            res.is_Ok() ==> res.get_Ok_0()@ == RabbitmqClusterView::from_dynamic_object(obj@).get_Ok_0(),
+            res.is_Ok() == RabbitmqClusterView::unmarshal(obj@).is_Ok(),
+            res.is_Ok() ==> res.get_Ok_0()@ == RabbitmqClusterView::unmarshal(obj@).get_Ok_0(),
     {
         let parse_result = obj.into_kube().try_parse::<deps_hack::RabbitmqCluster>();
         if parse_result.is_ok() {
@@ -187,6 +187,22 @@ impl RabbitmqClusterSpec {
     }
 
     #[verifier(external_body)]
+    pub fn labels(&self) -> (labels: StringMap)
+        ensures
+            labels@ == self@.labels,
+    {
+        StringMap::from_rust_map(self.inner.labels.clone())
+    }
+
+    #[verifier(external_body)]
+    pub fn annotations(&self) -> (annotations: StringMap)
+        ensures
+            annotations@ == self@.annotations,
+    {
+        StringMap::from_rust_map(self.inner.annotations.clone())
+    }
+
+    #[verifier(external_body)]
     pub fn resources(&self) -> (resources: Option<ResourceRequirements>)
         ensures
             self@.resources.is_Some() == resources.is_Some(),
@@ -238,6 +254,30 @@ impl RabbitmqConfig {
             additional_config.is_Some() ==> additional_config.get_Some_0()@ == self@.additional_config.get_Some_0(),
     {
         match &self.inner.additional_config {
+            Some(n) => Some(String::from_rust_string(n.to_string())),
+            None => None,
+        }
+    }
+
+    #[verifier(external_body)]
+    pub fn advanced_config(&self) -> (advanced_config: Option<String>)
+        ensures
+            self@.advanced_config.is_Some() == advanced_config.is_Some(),
+            advanced_config.is_Some() ==> advanced_config.get_Some_0()@ == self@.advanced_config.get_Some_0(),
+    {
+        match &self.inner.advanced_config {
+            Some(n) => Some(String::from_rust_string(n.to_string())),
+            None => None,
+        }
+    }
+
+    #[verifier(external_body)]
+    pub fn env_config(&self) -> (env_config: Option<String>)
+        ensures
+            self@.env_config.is_Some() == env_config.is_Some(),
+            env_config.is_Some() ==> env_config.get_Some_0()@ == self@.env_config.get_Some_0(),
+    {
+        match &self.inner.env_config {
             Some(n) => Some(String::from_rust_string(n.to_string())),
             None => None,
         }
