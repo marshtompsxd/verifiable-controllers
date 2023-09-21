@@ -210,6 +210,12 @@ impl ContainerPort {
         ContainerPort { inner: self.inner.clone() }
     }
 
+
+    #[verifier(external)]
+    pub fn clone(&self) -> ContainerPort {
+        ContainerPort { inner: self.inner.clone() }
+    }
+
 }
 
 #[verifier(external_body)]
