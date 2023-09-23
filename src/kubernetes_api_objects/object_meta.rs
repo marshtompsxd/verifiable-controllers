@@ -206,13 +206,6 @@ impl ObjectMeta {
         self.inner.finalizers = None;
     }
 
-    #[verifier(external_body)]
-    pub fn clone(&self) -> ObjectMeta
-    {
-        ObjectMeta {
-            inner: self.inner.clone(),
-        }
-    }
 }
 
 impl ResourceWrapper<deps_hack::k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta> for ObjectMeta {
