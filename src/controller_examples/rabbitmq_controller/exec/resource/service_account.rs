@@ -14,6 +14,7 @@ use crate::rabbitmq_controller::exec::types::*;
 use crate::rabbitmq_controller::spec::resource as spec_resource;
 use crate::rabbitmq_controller::spec::types::RabbitmqClusterView;
 use crate::reconciler::exec::{io::*, reconciler::*, resource_builder::*};
+use crate::reconciler::spec::resource_builder::ResourceBuilder as _;
 use crate::vstd_ext::string_map::StringMap;
 use crate::vstd_ext::string_view::*;
 use vstd::prelude::*;
@@ -39,7 +40,15 @@ impl ResourceBuilder<RabbitmqCluster, RabbitmqReconcileState, spec_resource::Ser
     }
 
     fn make(rabbitmq: &RabbitmqCluster, state: &RabbitmqReconcileState) -> Result<DynamicObject, ()> {
-        Ok(make_service_account(rabbitmq).marshal())
+        let account = make_service_account(rabbitmq);
+        let dyn_obj = account.marshal();
+        let res = Ok(dyn_obj);
+        assert(account@ == spec_resource::make_service_account(rabbitmq@));
+        assert(dyn_obj@ == spec_resource::make_service_account(rabbitmq@).marshal());
+        assert(resource_res_to_view(res) == spec_resource::ServiceAccountBuilder::make(rabbitmq@, state@));
+        // assert()
+        // Ok(dyn_obj)
+        res
     }
 
     fn update(rabbitmq: &RabbitmqCluster, state: &RabbitmqReconcileState, obj: DynamicObject) -> Result<DynamicObject, ()> {
